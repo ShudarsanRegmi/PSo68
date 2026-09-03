@@ -4,8 +4,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv1D, BatchNorm, Dropout, Bidirectional, LSTM, Dense
-from sklearn.preprocessing import StandardScaler
+from tensorflow.keras.layers import Conv1D, BatchNormalization, Dropout, Bidirectional, LSTM, Dense
 import matplotlib.pyplot as plt
 
 # -------------------------------------------------------------
@@ -14,8 +13,27 @@ import matplotlib.pyplot as plt
 def load_dataset_pairs(base_path, window_size=20, stride=1):
     X_list, y_list = [], []
     
+    # Check current directory and parent directory if dataset folder exists
+    possible_paths = [
+        base_path,
+        os.path.join(".", "IO-VNBD", "Synchronised V abd S datasets", "Categorised IOVNB Dataset"),
+        os.path.join("..", "IO-VNBD", "Synchronised V abd S datasets", "Categorised IOVNB Dataset"),
+        os.path.join(".", "Synchronised V abd S datasets", "Categorised IOVNB Dataset")
+    ]
+    
+    selected_path = None
+    for p in possible_paths:
+        if os.path.exists(p):
+            selected_path = p
+            break
+            
+    if selected_path is None:
+        selected_path = base_path
+
+    print(f"Searching dataset in: {os.path.abspath(selected_path)}")
+    
     # Locate all synchronized S- and V- CSV pairs
-    s_files = glob.glob(os.path.join(base_path, "**/S-*.csv"), recursive=True)
+    s_files = glob.glob(os.path.join(selected_path, "**/S-*.csv"), recursive=True)
     print(f"Found {len(s_files)} smartphone CSV files.")
     
     for idx, s_file in enumerate(s_files, 1):
@@ -75,8 +93,10 @@ def load_dataset_pairs(base_path, window_size=20, stride=1):
 def build_velocity_model(input_shape=(20, 10)):
     model = Sequential([
         Conv1D(64, kernel_size=3, padding='same', activation='relu', input_shape=input_shape),
+        BatchNormalization(),
         Dropout(0.2),
         Conv1D(128, kernel_size=3, padding='same', activation='relu'),
+        BatchNormalization(),
         Dropout(0.2),
         Bidirectional(LSTM(64, return_sequences=False)),
         Dense(64, activation='relu'),
@@ -89,12 +109,16 @@ def build_velocity_model(input_shape=(20, 10)):
 # 3. MAIN TRAINING & INFERENCE PIPELINE
 # -------------------------------------------------------------
 if __name__ == "__main__":
-    dataset_path = "../IO-VNBD/Synchronised V abd S datasets/Categorised IOVNB Dataset"
+    dataset_path = "./IO-VNBD/Synchronised V abd S datasets/Categorised IOVNB Dataset"
     
     print("Loading and windowing IO-VNBD dataset...")
     X, y = load_dataset_pairs(dataset_path, window_size=20, stride=2)
     print(f"Dataset Loaded! Samples: {X.shape[0]}, Window Shape: {X.shape[1:]}")
     
+    if len(X) == 0:
+        print("\nERROR: No dataset files were loaded! Please ensure your dataset directory exists.")
+        exit(1)
+        
     # Train / Val Split
     split_idx = int(0.85 * len(X))
     X_train, y_train = X[:split_idx], y[:split_idx]
