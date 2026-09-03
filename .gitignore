@@ -1,0 +1,6 @@
+IO-VNBD/
+*.zip
+downloadscripts/
+__pycache__/
+*.h5
+*.png
