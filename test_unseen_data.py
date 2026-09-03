@@ -4,7 +4,14 @@ import glob
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-import matplotlib.pyplot as plt
+
+# Try importing Plotly for interactive web-based charts
+try:
+    import plotly.graph_objects as go
+    HAS_PLOTLY = True
+except ImportError:
+    HAS_PLOTLY = False
+    import matplotlib.pyplot as plt
 
 def find_column(df, keyword):
     """Helper to find a column matching a keyword regardless of whitespace/encoding."""
@@ -14,7 +21,7 @@ def find_column(df, keyword):
     raise KeyError(f"Keyword '{keyword}' not found in columns: {list(df.columns)}")
 
 def predict_on_unseen_file(s_csv_path, v_csv_path=None, model_path="./trained_models/velocity_bilstm_model.h5", window_size=20):
-    # 1. Load trained model with compile=False to avoid Keras 3 deserialization errors
+    # 1. Load trained model
     if not os.path.exists(model_path):
         print(f"Error: Model file not found at {model_path}")
         return
@@ -93,9 +100,7 @@ def predict_on_unseen_file(s_csv_path, v_csv_path=None, model_path="./trained_mo
     
     # 3. Predict Velocity
     y_pred = model.predict(X_unseen).flatten() # Speed in m/s
-    
-    # Convert to km/h for easy reading
-    y_pred_kmh = y_pred * 3.6
+    y_pred_kmh = y_pred * 3.6 # Convert to km/h
     
     # 4. Optional: Load Vehicle Ground Truth if available for comparison
     y_true_kmh = None
@@ -123,25 +128,70 @@ def predict_on_unseen_file(s_csv_path, v_csv_path=None, model_path="./trained_mo
         y_pred_kmh = y_pred_kmh[:min_len]
         y_true_kmh = y_true_kmh[:min_len]
     
-    # 5. Plot Results
-    plt.figure(figsize=(14, 6))
     time_seconds = np.arange(len(y_pred_kmh)) * 0.1 # 10 Hz = 0.1s per step
-    
-    plt.plot(time_seconds, y_pred_kmh, label='AI Predicted Speed (km/h)', color='red', linewidth=1.5)
-    if y_true_kmh is not None:
-        plt.plot(time_seconds, y_true_kmh, label='True Vehicle Ground Speed (km/h)', color='blue', alpha=0.7, linestyle='--')
-        
-    plt.title(f"Velocity Inference on Unseen Data: {os.path.basename(actual_s_path)}")
-    plt.xlabel("Elapsed Time (Seconds)")
-    plt.ylabel("Vehicle Speed (km/h)")
-    plt.legend()
-    plt.grid(True)
-    
-    out_plot = "./trained_models/unseen_test_inference.png"
     os.makedirs("./trained_models", exist_ok=True)
-    plt.savefig(out_plot)
-    print(f"Inference plot saved to {out_plot}")
-    plt.show()
+
+    # 5. Generate Interactive Plotly HTML Chart
+    if HAS_PLOTLY:
+        print("Generating interactive Plotly graph...")
+        fig = go.Figure()
+
+        fig.add_trace(go.Scatter(
+            x=time_seconds, 
+            y=y_pred_kmh,
+            mode='lines',
+            name='AI Predicted Speed (km/h)',
+            line=dict(color='red', width=1.5)
+        ))
+
+        if y_true_kmh is not None:
+            fig.add_trace(go.Scatter(
+                x=time_seconds, 
+                y=y_true_kmh,
+                mode='lines',
+                name='True Vehicle Ground Speed (km/h)',
+                line=dict(color='blue', width=1.5, dash='dash')
+            ))
+
+        fig.update_layout(
+            title=f"Interactive Velocity Inference: {os.path.basename(actual_s_path)}",
+            xaxis_title="Elapsed Time (Seconds)",
+            yaxis_title="Vehicle Speed (km/h)",
+            hovermode="x unified",
+            xaxis=dict(
+                rangeslider=dict(visible=True),  # Interactive range slider at bottom
+                type="linear"
+            ),
+            template="plotly_white"
+        )
+
+        out_html = "./trained_models/interactive_velocity_inference.html"
+        fig.write_html(out_html)
+        print(f"Interactive HTML graph saved to: {os.path.abspath(out_html)}")
+        print("Open this file in any browser to pan, zoom, and inspect data interactively!")
+        
+        # Try launching default browser automatically
+        try:
+            import webbrowser
+            webbrowser.open(os.path.abspath(out_html))
+        except Exception:
+            pass
+
+    else:
+        # Fallback Matplotlib plot with pan/zoom enabled
+        print("Plotly not installed. Install with 'pip install plotly' for web charts.")
+        print("Rendering Matplotlib chart with pan/zoom window...")
+        plt.figure(figsize=(14, 6))
+        plt.plot(time_seconds, y_pred_kmh, label='AI Predicted Speed (km/h)', color='red', linewidth=1.5)
+        if y_true_kmh is not None:
+            plt.plot(time_seconds, y_true_kmh, label='True Vehicle Speed (km/h)', color='blue', alpha=0.7, linestyle='--')
+        plt.title(f"Velocity Inference: {os.path.basename(actual_s_path)}")
+        plt.xlabel("Elapsed Time (Seconds)")
+        plt.ylabel("Vehicle Speed (km/h)")
+        plt.legend()
+        plt.grid(True)
+        plt.savefig("./trained_models/unseen_test_inference.png")
+        plt.show()
 
 if __name__ == "__main__":
     default_s_file = "IO-VNBD/Synchronised V abd S datasets/Categorised IOVNB Dataset/M (Driver B)/S-M.csv"
