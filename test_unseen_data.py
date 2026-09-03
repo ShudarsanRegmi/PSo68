@@ -14,17 +14,40 @@ def find_column(df, keyword):
     raise KeyError(f"Keyword '{keyword}' not found in columns: {list(df.columns)}")
 
 def predict_on_unseen_file(s_csv_path, v_csv_path=None, model_path="./trained_models/velocity_bilstm_model.h5", window_size=20):
-    # 1. Load trained model
+    # 1. Load trained model with compile=False to avoid Keras 3 deserialization errors
     if not os.path.exists(model_path):
         print(f"Error: Model file not found at {model_path}")
         return
     
     print(f"Loading trained model from {model_path}...")
-    model = tf.keras.models.load_model(model_path)
+    try:
+        model = tf.keras.models.load_model(model_path, compile=False)
+    except Exception:
+        model = tf.keras.models.load_model(model_path, custom_objects={'mse': tf.keras.losses.MeanSquaredError()}, compile=False)
+        
+    print("Model loaded successfully!")
     
-    # 2. Read and clean Smartphone CSV
-    print(f"Loading unseen smartphone CSV: {s_csv_path}")
-    df_s = pd.read_csv(s_csv_path, encoding='latin1')
+    # 2. Resolve Smartphone CSV Path
+    possible_s_paths = [
+        s_csv_path,
+        os.path.join(".", s_csv_path),
+        os.path.join("..", s_csv_path),
+        os.path.join(".", "IO-VNBD", "Synchronised V abd S datasets", "Categorised IOVNB Dataset", "M (Driver B)", "S-M.csv"),
+        os.path.join("..", "IO-VNBD", "Synchronised V abd S datasets", "Categorised IOVNB Dataset", "M (Driver B)", "S-M.csv")
+    ]
+    
+    actual_s_path = None
+    for p in possible_s_paths:
+        if p and os.path.exists(p):
+            actual_s_path = p
+            break
+            
+    if actual_s_path is None:
+        print(f"Error: Could not find smartphone CSV file at {s_csv_path}")
+        return
+
+    print(f"Loading unseen smartphone CSV: {actual_s_path}")
+    df_s = pd.read_csv(actual_s_path, encoding='latin1')
     df_s.columns = [c.strip() for c in df_s.columns]
     
     # Extract 10 IMU feature channels
@@ -76,8 +99,23 @@ def predict_on_unseen_file(s_csv_path, v_csv_path=None, model_path="./trained_mo
     
     # 4. Optional: Load Vehicle Ground Truth if available for comparison
     y_true_kmh = None
-    if v_csv_path and os.path.exists(v_csv_path):
-        df_v = pd.read_csv(v_csv_path, encoding='latin1')
+    actual_v_path = None
+    if v_csv_path:
+        possible_v_paths = [
+            v_csv_path,
+            os.path.join(".", v_csv_path),
+            os.path.join("..", v_csv_path),
+            os.path.join(".", "IO-VNBD", "Synchronised V abd S datasets", "Categorised IOVNB Dataset", "M (Driver B)", "V-M.csv"),
+            os.path.join("..", "IO-VNBD", "Synchronised V abd S datasets", "Categorised IOVNB Dataset", "M (Driver B)", "V-M.csv")
+        ]
+        for p in possible_v_paths:
+            if p and os.path.exists(p):
+                actual_v_path = p
+                break
+
+    if actual_v_path and os.path.exists(actual_v_path):
+        print(f"Loading vehicle ground truth CSV: {actual_v_path}")
+        df_v = pd.read_csv(actual_v_path, encoding='latin1')
         df_v.columns = [c.strip() for c in df_v.columns]
         col_vel = find_column(df_v, 'Velocity')
         y_true_kmh = df_v[col_vel].values[window_size:]
@@ -93,7 +131,7 @@ def predict_on_unseen_file(s_csv_path, v_csv_path=None, model_path="./trained_mo
     if y_true_kmh is not None:
         plt.plot(time_seconds, y_true_kmh, label='True Vehicle Ground Speed (km/h)', color='blue', alpha=0.7, linestyle='--')
         
-    plt.title(f"Velocity Inference on Unseen Data: {os.path.basename(s_csv_path)}")
+    plt.title(f"Velocity Inference on Unseen Data: {os.path.basename(actual_s_path)}")
     plt.xlabel("Elapsed Time (Seconds)")
     plt.ylabel("Vehicle Speed (km/h)")
     plt.legend()
@@ -106,9 +144,8 @@ def predict_on_unseen_file(s_csv_path, v_csv_path=None, model_path="./trained_mo
     plt.show()
 
 if __name__ == "__main__":
-    # Example usage: Test on an unseen file from IO-VNBD or custom CSV
-    default_s_file = "../IO-VNBD/Synchronised V abd S datasets/Categorised IOVNB Dataset/M (Driver B)/S-M.csv"
-    default_v_file = "../IO-VNBD/Synchronised V abd S datasets/Categorised IOVNB Dataset/M (Driver B)/V-M.csv"
+    default_s_file = "IO-VNBD/Synchronised V abd S datasets/Categorised IOVNB Dataset/M (Driver B)/S-M.csv"
+    default_v_file = "IO-VNBD/Synchronised V abd S datasets/Categorised IOVNB Dataset/M (Driver B)/V-M.csv"
     
     if len(sys.argv) > 1:
         s_file = sys.argv[1]
