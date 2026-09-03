@@ -7,6 +7,13 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv1D, BatchNormalization, Dropout, Bidirectional, LSTM, Dense
 import matplotlib.pyplot as plt
 
+def find_column(df, keyword):
+    """Robust helper to find a column matching a keyword regardless of whitespace or special characters."""
+    for col in df.columns:
+        if keyword.lower() in col.lower():
+            return col
+    raise KeyError(f"Keyword '{keyword}' not found in columns: {list(df.columns)}")
+
 # -------------------------------------------------------------
 # 1. DATA LOADING & WINDOWING FUNCTION
 # -------------------------------------------------------------
@@ -45,6 +52,10 @@ def load_dataset_pairs(base_path, window_size=20, stride=1):
             df_s = pd.read_csv(s_file, encoding='latin1')
             df_v = pd.read_csv(v_file, encoding='latin1')
             
+            # Clean column names by stripping leading/trailing whitespace
+            df_s.columns = [c.strip() for c in df_s.columns]
+            df_v.columns = [c.strip() for c in df_v.columns]
+            
             min_len = min(len(df_s), len(df_v))
             if min_len < window_size + 10:
                 continue
@@ -52,30 +63,45 @@ def load_dataset_pairs(base_path, window_size=20, stride=1):
             df_s = df_s.iloc[:min_len]
             df_v = df_v.iloc[:min_len]
             
-            # Extract features from S- (Smartphone)
-            ax = df_s['ACCELEROMETER X (m/s²)'].values
-            ay = df_s['ACCELEROMETER Y (m/s²)'].values
-            az = df_s['ACCELEROMETER Z (m/s²)'].values
-            gx = df_s['GRAVITY X (m/s²)'].values
-            gy = df_s['GRAVITY Y (m/s²)'].values
-            gz = df_s['GRAVITY Z (m/s²)'].values
+            # Extract features from S- (Smartphone) using robust column search
+            col_ax = find_column(df_s, 'ACCELEROMETER X')
+            col_ay = find_column(df_s, 'ACCELEROMETER Y')
+            col_az = find_column(df_s, 'ACCELEROMETER Z')
+            col_gx = find_column(df_s, 'GRAVITY X')
+            col_gy = find_column(df_s, 'GRAVITY Y')
+            col_gz = find_column(df_s, 'GRAVITY Z')
+            
+            col_gy_yaw = find_column(df_s, 'GYROSCOPE Yaw')
+            col_gy_pitch = find_column(df_s, 'GYROSCOPE Pitch')
+            col_gy_roll = find_column(df_s, 'GYROSCOPE Roll')
+            
+            col_yaw = find_column(df_s, 'ORIENTATION (Yaw)')
+            col_pitch = find_column(df_s, 'ORIENTATION (Pitch)')
+            
+            ax = df_s[col_ax].values
+            ay = df_s[col_ay].values
+            az = df_s[col_az].values
+            gx = df_s[col_gx].values
+            gy = df_s[col_gy].values
+            gz = df_s[col_gz].values
             
             # Gravity-free linear acceleration
             lax, lay, laz = ax - gx, ay - gy, az - gz
             acc_mag = np.sqrt(lax**2 + lay**2 + laz**2)
             
-            gy_yaw = df_s['GYROSCOPE Yaw (rad/s)'].values
-            gy_pitch = df_s['GYROSCOPE Pitch (rad/s)'].values
-            gy_roll = df_s['GYROSCOPE Roll (rad/s)'].values
+            gy_yaw = df_s[col_gy_yaw].values
+            gy_pitch = df_s[col_gy_pitch].values
+            gy_roll = df_s[col_gy_roll].values
             gyro_mag = np.sqrt(gy_yaw**2 + gy_pitch**2 + gy_roll**2)
             
-            yaw = df_s['ORIENTATION (Yaw) (°)'].values / 360.0
-            pitch = df_s['ORIENTATION (Pitch) (°)'].values / 180.0
+            yaw = df_s[col_yaw].values / 360.0
+            pitch = df_s[col_pitch].values / 180.0
             
             features = np.column_stack([lax, lay, laz, acc_mag, gy_yaw, gy_pitch, gy_roll, gyro_mag, yaw, pitch])
             
             # Target speed from V- (Vehicle speed in m/s)
-            target_speed = df_v['Velocity (km/hr)'].values / 3.6
+            col_vel = find_column(df_v, 'Velocity')
+            target_speed = df_v[col_vel].values / 3.6
             
             # Create sliding windows
             for i in range(0, min_len - window_size, stride):
