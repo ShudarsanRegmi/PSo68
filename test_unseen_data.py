@@ -1,17 +1,11 @@
 import os
 import sys
 import glob
+import webbrowser
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-
-# Try importing Plotly for interactive web-based charts
-try:
-    import plotly.graph_objects as go
-    HAS_PLOTLY = True
-except ImportError:
-    HAS_PLOTLY = False
-    import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 
 def find_column(df, keyword):
     """Helper to find a column matching a keyword regardless of whitespace/encoding."""
@@ -131,67 +125,47 @@ def predict_on_unseen_file(s_csv_path, v_csv_path=None, model_path="./trained_mo
     time_seconds = np.arange(len(y_pred_kmh)) * 0.1 # 10 Hz = 0.1s per step
     os.makedirs("./trained_models", exist_ok=True)
 
-    # 5. Generate Interactive Plotly HTML Chart
-    if HAS_PLOTLY:
-        print("Generating interactive Plotly graph...")
-        fig = go.Figure()
+    # 5. Pure Interactive Plotly Web Dashboard
+    print("Generating pure interactive Plotly web chart...")
+    fig = go.Figure()
 
+    fig.add_trace(go.Scatter(
+        x=time_seconds, 
+        y=y_pred_kmh,
+        mode='lines',
+        name='AI Predicted Speed (km/h)',
+        line=dict(color='red', width=2)
+    ))
+
+    if y_true_kmh is not None:
         fig.add_trace(go.Scatter(
             x=time_seconds, 
-            y=y_pred_kmh,
+            y=y_true_kmh,
             mode='lines',
-            name='AI Predicted Speed (km/h)',
-            line=dict(color='red', width=1.5)
+            name='True Vehicle Ground Speed (km/h)',
+            line=dict(color='blue', width=1.5, dash='dash')
         ))
 
-        if y_true_kmh is not None:
-            fig.add_trace(go.Scatter(
-                x=time_seconds, 
-                y=y_true_kmh,
-                mode='lines',
-                name='True Vehicle Ground Speed (km/h)',
-                line=dict(color='blue', width=1.5, dash='dash')
-            ))
+    fig.update_layout(
+        title=dict(
+            text=f"Interactive Velocity Inference — {os.path.basename(actual_s_path)}",
+            font=dict(size=20)
+        ),
+        xaxis_title="Elapsed Time (Seconds)",
+        yaxis_title="Vehicle Speed (km/h)",
+        hovermode="x unified",
+        xaxis=dict(
+            rangeslider=dict(visible=True),  # Interactive timeline range slider
+            type="linear"
+        ),
+        template="plotly_dark"
+    )
 
-        fig.update_layout(
-            title=f"Interactive Velocity Inference: {os.path.basename(actual_s_path)}",
-            xaxis_title="Elapsed Time (Seconds)",
-            yaxis_title="Vehicle Speed (km/h)",
-            hovermode="x unified",
-            xaxis=dict(
-                rangeslider=dict(visible=True),  # Interactive range slider at bottom
-                type="linear"
-            ),
-            template="plotly_white"
-        )
-
-        out_html = "./trained_models/interactive_velocity_inference.html"
-        fig.write_html(out_html)
-        print(f"Interactive HTML graph saved to: {os.path.abspath(out_html)}")
-        print("Open this file in any browser to pan, zoom, and inspect data interactively!")
-        
-        # Try launching default browser automatically
-        try:
-            import webbrowser
-            webbrowser.open(os.path.abspath(out_html))
-        except Exception:
-            pass
-
-    else:
-        # Fallback Matplotlib plot with pan/zoom enabled
-        print("Plotly not installed. Install with 'pip install plotly' for web charts.")
-        print("Rendering Matplotlib chart with pan/zoom window...")
-        plt.figure(figsize=(14, 6))
-        plt.plot(time_seconds, y_pred_kmh, label='AI Predicted Speed (km/h)', color='red', linewidth=1.5)
-        if y_true_kmh is not None:
-            plt.plot(time_seconds, y_true_kmh, label='True Vehicle Speed (km/h)', color='blue', alpha=0.7, linestyle='--')
-        plt.title(f"Velocity Inference: {os.path.basename(actual_s_path)}")
-        plt.xlabel("Elapsed Time (Seconds)")
-        plt.ylabel("Vehicle Speed (km/h)")
-        plt.legend()
-        plt.grid(True)
-        plt.savefig("./trained_models/unseen_test_inference.png")
-        plt.show()
+    out_html = os.path.abspath("./trained_models/interactive_velocity_inference.html")
+    fig.write_html(out_html)
+    print(f"\nSUCCESS: Interactive HTML chart saved to: {out_html}")
+    print("Opening interactive chart in your browser...")
+    webbrowser.open(out_html)
 
 if __name__ == "__main__":
     default_s_file = "IO-VNBD/Synchronised V abd S datasets/Categorised IOVNB Dataset/M (Driver B)/S-M.csv"
