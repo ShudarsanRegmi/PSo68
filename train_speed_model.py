@@ -89,7 +89,7 @@ def build_velocity_model(input_shape=(20, 10)):
 # 3. MAIN TRAINING & INFERENCE PIPELINE
 # -------------------------------------------------------------
 if __name__ == "__main__":
-    dataset_path = "./IO-VNBD/Synchronised V abd S datasets/Categorised IOVNB Dataset"
+    dataset_path = "../IO-VNBD/Synchronised V abd S datasets/Categorised IOVNB Dataset"
     
     print("Loading and windowing IO-VNBD dataset...")
     X, y = load_dataset_pairs(dataset_path, window_size=20, stride=2)
